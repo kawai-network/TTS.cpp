@@ -231,3 +231,4 @@ Contributions welcome! Please ensure:
 - Code works with `CGO_ENABLED=0`
 - Tested on multiple platforms
 - Documentation is updated
+# Trigger workflow
