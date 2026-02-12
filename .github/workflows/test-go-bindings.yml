@@ -236,27 +236,49 @@ jobs:
     - name: Find and setup library
       run: |
         cd ../..
-        # Find the library
-        find build-c-api -name "libtts_c_api*" -o -name "libtts*" | head -5
+        
+        # Debug: Find all built libraries
+        echo "=== All libraries in build-c-api ==="
+        find build-c-api -name "*.so" -o -name "*.dylib" 2>/dev/null | head -20
         
         # Setup library path
+        mkdir -p /tmp/tts-libs
+        
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
-          # For macOS, copy to a local lib directory
-          mkdir -p /tmp/tts-libs
-          cp build-c-api/bindings/go/internal/libtts_c_api.dylib /tmp/tts-libs/ 2>/dev/null || \
+          # For macOS
+          # Try to find C API library first, then fall back to main library
+          if [ -f "build-c-api/bindings/go/libtts_c_api.dylib" ]; then
+            cp build-c-api/bindings/go/libtts_c_api.dylib /tmp/tts-libs/
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.dylib" >> $GITHUB_ENV
+          elif [ -f "build-c-api/libtts_c_api.dylib" ]; then
+            cp build-c-api/libtts_c_api.dylib /tmp/tts-libs/
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.dylib" >> $GITHUB_ENV
+          else
+            # Fallback to main library - will fail but let's see the error
             cp build-c-api/src/libtts*.dylib /tmp/tts-libs/ 2>/dev/null || true
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts.dylib" >> $GITHUB_ENV
+          fi
           cp build-c-api/ggml/src/libggml*.dylib /tmp/tts-libs/ 2>/dev/null || true
-          ls -la /tmp/tts-libs/
-          echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.dylib" >> $GITHUB_ENV
         else
           # For Linux
-          mkdir -p /tmp/tts-libs
-          cp build-c-api/bindings/go/internal/libtts_c_api.so /tmp/tts-libs/ 2>/dev/null || \
+          # Try to find C API library first, then fall back to main library
+          if [ -f "build-c-api/bindings/go/libtts_c_api.so" ]; then
+            cp build-c-api/bindings/go/libtts_c_api.so /tmp/tts-libs/
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.so" >> $GITHUB_ENV
+          elif [ -f "build-c-api/libtts_c_api.so" ]; then
+            cp build-c-api/libtts_c_api.so /tmp/tts-libs/
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.so" >> $GITHUB_ENV
+          else
+            # Fallback to main library - will fail but let's see the error
             cp build-c-api/src/libtts*.so /tmp/tts-libs/ 2>/dev/null || true
+            echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts.so" >> $GITHUB_ENV
+          fi
           cp build-c-api/ggml/src/libggml*.so /tmp/tts-libs/ 2>/dev/null || true
-          ls -la /tmp/tts-libs/
-          echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.so" >> $GITHUB_ENV
         fi
+        
+        echo "=== Libraries in /tmp/tts-libs ==="
+        ls -la /tmp/tts-libs/
+        echo "TTS_LIBRARY_PATH set to: $(cat $GITHUB_ENV | grep TTS_LIBRARY_PATH | cut -d= -f2)"
       shell: bash
     
     - name: Download test model (Kokoro Q5)
