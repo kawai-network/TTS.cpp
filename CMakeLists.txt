@@ -148,3 +148,9 @@ if (TTS_BUILD_EXAMPLES)
 endif()
 
 add_subdirectory(tests)
+
+# Go bindings (optional)
+option(TTS_BUILD_GO_BINDINGS "TTS.cpp: build Go bindings C API library" OFF)
+if (TTS_BUILD_GO_BINDINGS)
+    add_subdirectory(bindings/go)
+endif()

@@ -179,9 +179,130 @@ jobs:
         govulncheck ./... || true
       continue-on-error: true
 
+  integration-test:
+    name: Integration Test - TTS Generation
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    runs-on: ${{ matrix.os }}
+    
+    defaults:
+      run:
+        working-directory: ./bindings/go
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+    
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install cmake ninja
+    
+    - name: Download dependencies
+      run: |
+        go mod tidy
+        go mod download
+    
+    - name: Build C API library
+      run: |
+        cd ../..
+        cmake -B build-c-api -G Ninja \
+          -DBUILD_SHARED_LIBS=ON \
+          -DTTS_BUILD_EXAMPLES=OFF \
+          -DTTS_BUILD_GO_BINDINGS=ON \
+          -DCMAKE_BUILD_TYPE=Release
+        cmake --build build-c-api --config Release --parallel
+        
+        # Show what was built
+        echo "=== Built libraries ==="
+        find build-c-api -name "*.so" -o -name "*.dylib" -o -name "*.dll" | head -20
+    
+    - name: Find and setup library
+      run: |
+        cd ../..
+        # Find the library
+        find build-c-api -name "libtts_c_api*" -o -name "libtts*" | head -5
+        
+        # Setup library path
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
+          # For macOS, copy to a local lib directory
+          mkdir -p /tmp/tts-libs
+          cp build-c-api/bindings/go/internal/libtts_c_api.dylib /tmp/tts-libs/ 2>/dev/null || \
+            cp build-c-api/src/libtts*.dylib /tmp/tts-libs/ 2>/dev/null || true
+          cp build-c-api/ggml/src/libggml*.dylib /tmp/tts-libs/ 2>/dev/null || true
+          ls -la /tmp/tts-libs/
+          echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.dylib" >> $GITHUB_ENV
+        else
+          # For Linux
+          mkdir -p /tmp/tts-libs
+          cp build-c-api/bindings/go/internal/libtts_c_api.so /tmp/tts-libs/ 2>/dev/null || \
+            cp build-c-api/src/libtts*.so /tmp/tts-libs/ 2>/dev/null || true
+          cp build-c-api/ggml/src/libggml*.so /tmp/tts-libs/ 2>/dev/null || true
+          ls -la /tmp/tts-libs/
+          echo "TTS_LIBRARY_PATH=/tmp/tts-libs/libtts_c_api.so" >> $GITHUB_ENV
+        fi
+      shell: bash
+    
+    - name: Download small test model
+      run: |
+        # Download a small Kokoro model for testing
+        # Note: Replace with actual model URL when available
+        # For now, we'll create a placeholder
+        echo "Downloading test model..."
+        # curl -L -o /tmp/test-model.gguf "https://huggingface.co/kawai-network/tts-test-model/resolve/main/kokoro-v1.gguf"
+        echo "Model download step - requires actual model URL"
+        echo "Skipping integration test without model file"
+      continue-on-error: true
+    
+    - name: Run integration tests
+      run: |
+        # Check if model exists
+        if [ ! -f "/tmp/test-model.gguf" ]; then
+          echo "No model file available, skipping integration tests"
+          echo "To run integration tests, provide TTS_TEST_MODEL_PATH"
+          exit 0
+        fi
+        
+        # Set environment variables
+        export TTS_TEST_MODEL_PATH=/tmp/test-model.gguf
+        export LD_LIBRARY_PATH=/tmp/tts-libs:$LD_LIBRARY_PATH
+        
+        # Run integration tests
+        go test -v -tags=integration -run TestIntegration ./... 2>&1 | tee integration-test.log
+      env:
+        CGO_ENABLED: 0
+        TTS_LIBRARY_PATH: ${{ env.TTS_LIBRARY_PATH }}
+      continue-on-error: true
+    
+    - name: Upload integration test artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-${{ matrix.os }}
+        path: |
+          ./bindings/go/integration-test.log
+          /tmp/tts-libs/
+        if-no-files-found: ignore
+
   test-summary:
     name: Test Summary
-    needs: [test-go-bindings, cross-compile, lint]
+    needs: [test-go-bindings, cross-compile, lint, integration-test]
     runs-on: ubuntu-latest
     if: always()
     
@@ -220,4 +341,9 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Cross-Compilation Results" >> $GITHUB_STEP_SUMMARY
         echo "All cross-compilation targets built successfully!" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Integration Test" >> $GITHUB_STEP_SUMMARY
+        echo "Integration test builds C library and prepares for TTS generation" >> $GITHUB_STEP_SUMMARY
+        echo "Note: Full integration test requires model file (download manually)" >> $GITHUB_STEP_SUMMARY
       shell: bash
