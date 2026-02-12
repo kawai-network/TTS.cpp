@@ -10,6 +10,11 @@ on:
         required: true
         default: 'v0.1.1'
 
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
 jobs:
   build-c-api-linux:
     name: Build C API Library (Linux)
