@@ -184,10 +184,18 @@ jobs:
       with:
         path: artifacts
 
+    - name: Package artifacts
+      run: |
+        cd artifacts
+        for dir in */; do
+          zip -r "${dir%/}.zip" "$dir"
+        done
+        ls -la *.zip
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: artifacts/**/*
+        files: artifacts/*.zip
         draft: false
         prerelease: false
       env:
