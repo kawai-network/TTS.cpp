@@ -1,0 +1,289 @@
+name: Build C API Library and Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.1)'
+        required: true
+        default: 'v0.1.1'
+
+jobs:
+  build-c-api-linux:
+    name: Build C API Library (Linux)
+    strategy:
+      matrix:
+        c_compiler: [gcc, clang]
+        include:
+          - c_compiler: gcc
+            cpp_compiler: g++
+          - c_compiler: clang
+            cpp_compiler: clang++
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+
+    - name: Build C API Library
+      run: |
+        cmake -B build-c-api \
+          -G Ninja \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DTTS_BUILD_EXAMPLES=OFF \
+          -DTTS_BUILD_GO_BINDINGS=ON
+        cmake --build build-c-api --config Release --parallel $(nproc)
+
+    - name: List built libraries
+      run: |
+        echo "=== Built libraries ==="
+        find build-c-api -name "libtts_c_api*" -o -name "libtts*" -o -name "libggml*" | grep -E "\.(so|a)$"
+        
+    - name: Prepare package
+      run: |
+        mkdir -p package/tts-c-api-linux-${{ matrix.c_compiler }}
+        # Copy C API library
+        find build-c-api -name "libtts_c_api.so" -exec cp {} package/tts-c-api-linux-${{ matrix.c_compiler }}/ \;
+        # Copy main library
+        find build-c-api/src -name "libtts.so" -exec cp {} package/tts-c-api-linux-${{ matrix.c_compiler }}/ \;
+        # Copy ggml libraries
+        find build-c-api/ggml/src -name "libggml*.so" -exec cp {} package/tts-c-api-linux-${{ matrix.c_compiler }}/ \;
+        # Copy headers
+        cp bindings/go/internal/tts_c_api.h package/tts-c-api-linux-${{ matrix.c_compiler }}/
+        ls -la package/tts-c-api-linux-${{ matrix.c_compiler }}/
+
+    - name: Create archive
+      run: |
+        cd package
+        zip -r tts-c-api-linux-${{ matrix.c_compiler }}.zip tts-c-api-linux-${{ matrix.c_compiler }}/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-c-api-linux-${{ matrix.c_compiler }}
+        path: package/tts-c-api-linux-${{ matrix.c_compiler }}.zip
+
+  build-c-api-macos:
+    name: Build C API Library (macOS)
+    strategy:
+      matrix:
+        os: [macos-latest]
+        arch: [arm64]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        brew install cmake ninja
+
+    - name: Build C API Library
+      run: |
+        cmake -B build-c-api \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DTTS_BUILD_EXAMPLES=OFF \
+          -DTTS_BUILD_GO_BINDINGS=ON \
+          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+        cmake --build build-c-api --config Release --parallel $(sysctl -n hw.ncpu)
+
+    - name: List built libraries
+      run: |
+        echo "=== Built libraries ==="
+        find build-c-api -name "libtts_c_api*" -o -name "libtts*" -o -name "libggml*" | grep -E "\.(dylib|a)$"
+
+    - name: Prepare package
+      run: |
+        mkdir -p package/tts-c-api-macos-${{ matrix.arch }}
+        # Copy C API library
+        find build-c-api -name "libtts_c_api.dylib" -exec cp {} package/tts-c-api-macos-${{ matrix.arch }}/ \;
+        # Copy main library
+        find build-c-api/src -name "libtts*.dylib" -exec cp {} package/tts-c-api-macos-${{ matrix.arch }}/ \;
+        # Copy ggml libraries
+        find build-c-api/ggml/src -name "libggml*.dylib" -exec cp {} package/tts-c-api-macos-${{ matrix.arch }}/ \;
+        # Copy headers
+        cp bindings/go/internal/tts_c_api.h package/tts-c-api-macos-${{ matrix.arch }}/
+        ls -la package/tts-c-api-macos-${{ matrix.arch }}/
+
+    - name: Create archive
+      run: |
+        cd package
+        zip -r tts-c-api-macos-${{ matrix.arch }}.zip tts-c-api-macos-${{ matrix.arch }}/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-c-api-macos-${{ matrix.arch }}
+        path: package/tts-c-api-macos-${{ matrix.arch }}.zip
+
+  build-c-api-windows:
+    name: Build C API Library (Windows)
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Enable Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+
+    - name: Build C API Library
+      run: |
+        cmake -B build-c-api `
+          -G Ninja `
+          -DCMAKE_C_COMPILER=cl `
+          -DCMAKE_CXX_COMPILER=cl `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DBUILD_SHARED_LIBS=ON `
+          -DTTS_BUILD_EXAMPLES=OFF `
+          -DTTS_BUILD_GO_BINDINGS=ON
+        cmake --build build-c-api --config Release --parallel
+
+    - name: List built libraries
+      run: |
+        echo "=== Built libraries ==="
+        Get-ChildItem -Path build-c-api -Recurse -Filter "*.dll" | Select-Object FullName
+        Get-ChildItem -Path build-c-api -Recurse -Filter "*.lib" | Select-Object FullName
+
+    - name: Prepare package
+      run: |
+        New-Item -ItemType Directory -Force -Path package\tts-c-api-windows-msvc
+        # Copy C API library
+        Copy-Item -Path build-c-api\bindings\go\tts_c_api.dll -Destination package\tts-c-api-windows-msvc\ -ErrorAction SilentlyContinue
+        # Copy main library
+        Copy-Item -Path build-c-api\src\tts.dll -Destination package\tts-c-api-windows-msvc\ -ErrorAction SilentlyContinue
+        # Copy ggml libraries
+        Copy-Item -Path build-c-api\ggml\src\ggml*.dll -Destination package\tts-c-api-windows-msvc\ -ErrorAction SilentlyContinue
+        # Copy headers
+        Copy-Item -Path bindings\go\internal\tts_c_api.h -Destination package\tts-c-api-windows-msvc\
+        Get-ChildItem -Path package\tts-c-api-windows-msvc\
+
+    - name: Create archive
+      run: |
+        Compress-Archive -Path package\tts-c-api-windows-msvc\* -DestinationPath package\tts-c-api-windows-msvc.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-c-api-windows-msvc
+        path: package/tts-c-api-windows-msvc.zip
+
+  release:
+    name: Create Release v0.1.1
+    needs: [build-c-api-linux, build-c-api-macos, build-c-api-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List artifacts
+      run: |
+        echo "=== Downloaded artifacts ==="
+        ls -la artifacts/
+        find artifacts -name "*.zip" -exec ls -lh {} \;
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.version || github.ref_name }}
+        name: Release ${{ github.event.inputs.version || github.ref_name }}
+        body: |
+          ## TTS.cpp C API Library Release ${{ github.event.inputs.version || github.ref_name }}
+
+          This release includes the C API library for Go bindings and other language integrations.
+
+          ### What's New
+          - C API library for language bindings
+          - Go bindings support (purego, CGO-free)
+          - Tested with Kokoro TTS models
+          - Integration tests included
+
+          ### Packages
+
+          **C API Libraries:**
+          - `tts-c-api-linux-gcc.zip` - Linux GCC build
+          - `tts-c-api-linux-clang.zip` - Linux Clang build
+          - `tts-c-api-macos-arm64.zip` - macOS ARM64 build
+          - `tts-c-api-windows-msvc.zip` - Windows MSVC build
+
+          ### Usage
+
+          #### Go
+          ```bash
+          go get github.com/kawai-network/TTS.cpp/bindings/go
+          ```
+
+          Download the appropriate library for your platform and set `TTS_LIBRARY_PATH` environment variable.
+
+          #### C/C++
+          ```c
+          #include "tts_c_api.h"
+          
+          tts_config config = tts_config_default();
+          tts_runner_handle* runner = tts_runner_create("model.gguf", 4, &config, false);
+          
+          tts_audio_data output;
+          tts_generate(runner, "Hello world", &output);
+          
+          tts_save_audio_wav(&output, "output.wav", 24000);
+          tts_audio_data_free(&output);
+          tts_runner_free(runner);
+          ```
+
+          ### Model Download
+          Compatible models available from HuggingFace:
+          - [Kokoro GGUF](https://huggingface.co/mmwillet2/Kokoro_GGUF)
+          - [Parler TTS GGUF](https://huggingface.co/mmwillet2/Parler_TTS_GGUF)
+
+          ### Checksums
+          See release assets for SHA256 checksums.
+        files: |
+          artifacts/**/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Generate checksums
+      run: |
+        cd artifacts
+        echo "## SHA256 Checksums" > checksums.txt
+        echo "" >> checksums.txt
+        find . -name "*.zip" -exec sha256sum {} \; >> checksums.txt
+        cat checksums.txt
+
+    - name: Upload checksums
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.version || github.ref_name }}
+        files: artifacts/checksums.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
