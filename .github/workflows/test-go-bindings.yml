@@ -259,36 +259,54 @@ jobs:
         fi
       shell: bash
     
-    - name: Download small test model
+    - name: Download test model (Kokoro Q5)
       run: |
-        # Download a small Kokoro model for testing
-        # Note: Replace with actual model URL when available
-        # For now, we'll create a placeholder
-        echo "Downloading test model..."
-        # curl -L -o /tmp/test-model.gguf "https://huggingface.co/kawai-network/tts-test-model/resolve/main/kokoro-v1.gguf"
-        echo "Model download step - requires actual model URL"
-        echo "Skipping integration test without model file"
-      continue-on-error: true
+        echo "Downloading Kokoro test model..."
+        # Download Kokoro_espeak_Q5.gguf (180MB) - smaller quantized version
+        curl -L -o /tmp/test-model.gguf \
+          "https://huggingface.co/mmwillet2/Kokoro_GGUF/resolve/main/Kokoro_espeak_Q5.gguf"
+        
+        # Verify download
+        if [ -f "/tmp/test-model.gguf" ]; then
+          ls -lh /tmp/test-model.gguf
+          echo "Model downloaded successfully!"
+        else
+          echo "Failed to download model"
+          exit 1
+        fi
+      timeout-minutes: 5
     
     - name: Run integration tests
       run: |
-        # Check if model exists
-        if [ ! -f "/tmp/test-model.gguf" ]; then
-          echo "No model file available, skipping integration tests"
-          echo "To run integration tests, provide TTS_TEST_MODEL_PATH"
-          exit 0
-        fi
-        
         # Set environment variables
         export TTS_TEST_MODEL_PATH=/tmp/test-model.gguf
         export LD_LIBRARY_PATH=/tmp/tts-libs:$LD_LIBRARY_PATH
+        export DYLD_LIBRARY_PATH=/tmp/tts-libs:$DYLD_LIBRARY_PATH
+        
+        echo "Model path: $TTS_TEST_MODEL_PATH"
+        echo "Library path: $TTS_LIBRARY_PATH"
+        echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+        
+        # Verify model exists
+        if [ ! -f "$TTS_TEST_MODEL_PATH" ]; then
+          echo "ERROR: Model file not found at $TTS_TEST_MODEL_PATH"
+          exit 1
+        fi
         
         # Run integration tests
         go test -v -tags=integration -run TestIntegration ./... 2>&1 | tee integration-test.log
+        
+        # Check if tests passed
+        if grep -q "FAIL" integration-test.log; then
+          echo "Integration tests failed!"
+          exit 1
+        fi
+        
+        echo "Integration tests completed successfully!"
       env:
         CGO_ENABLED: 0
         TTS_LIBRARY_PATH: ${{ env.TTS_LIBRARY_PATH }}
-      continue-on-error: true
+      timeout-minutes: 10
     
     - name: Upload integration test artifacts
       uses: actions/upload-artifact@v4
