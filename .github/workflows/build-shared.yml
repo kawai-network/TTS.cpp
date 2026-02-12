@@ -29,6 +29,10 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: Update submodules
+      run: |
+        git submodule update --init --recursive
+
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -89,6 +93,10 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: Update submodules
+      run: |
+        git submodule update --init --recursive
+
     - name: Install dependencies
       run: |
         brew install cmake ninja
@@ -131,6 +139,10 @@ jobs:
       with:
         submodules: recursive
         fetch-depth: 0
+
+    - name: Update submodules
+      run: |
+        git submodule update --init --recursive
 
     - name: Enable Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
