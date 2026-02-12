@@ -20,11 +20,9 @@ target_include_directories(tts_c_api PUBLIC
 target_link_libraries(tts_c_api PUBLIC tts ggml)
 
 # Set properties for shared library
+# Note: Need default visibility for C API symbols to be exported
 set_target_properties(tts_c_api PROPERTIES
     POSITION_INDEPENDENT_CODE ON
-    C_VISIBILITY_PRESET hidden
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN YES
 )
 
 # Export all symbols (needed for C API)
