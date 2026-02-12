@@ -26,7 +26,8 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        submodules: true
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Install dependencies
       run: |
@@ -76,13 +77,8 @@ jobs:
     name: Build Shared Library (macOS)
     strategy:
       matrix:
-        os: [macos-latest, macos-13]
-        arch: [x86_64, arm64]
-        exclude:
-          - os: macos-latest
-            arch: x86_64
-          - os: macos-13
-            arch: arm64
+        os: [macos-latest]
+        arch: [arm64]
 
     runs-on: ${{ matrix.os }}
 
@@ -90,7 +86,8 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        submodules: true
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Install dependencies
       run: |
@@ -132,7 +129,8 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        submodules: true
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Enable Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
