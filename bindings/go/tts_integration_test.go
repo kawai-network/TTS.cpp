@@ -4,8 +4,10 @@
 package tts
 
 import (
+	"fmt"
 	"os"
 	"testing"
+	"time"
 )
 
 // TestIntegrationGenerateAudio tests actual TTS generation
@@ -33,22 +35,28 @@ func TestIntegrationGenerateAudio(t *testing.T) {
 		AutoDownload: false,
 	}
 
-	// Create runner
+	// Create runner with timing
+	startTime := time.Now()
 	runner, err := NewRunnerWithConfig(modelPath, 4, config, true, libConfig)
+	loadDuration := time.Since(startTime)
 	if err != nil {
 		t.Fatalf("Failed to create runner: %v", err)
 	}
+	t.Logf("⏱️  Model loading time: %v", loadDuration)
 	// Skip cleanup due to C library crash - TTS generation works!
 	// defer runner.Close()
 
-	// Generate audio
+	// Generate audio with timing
 	text := "Hello, this is a test."
 	t.Logf("Generating audio for: %s", text)
 
+	genStartTime := time.Now()
 	audio, err := runner.Generate(text)
+	genDuration := time.Since(genStartTime)
 	if err != nil {
 		t.Fatalf("Failed to generate audio: %v", err)
 	}
+	t.Logf("⏱️  Audio generation time: %v", genDuration)
 
 	if audio == nil {
 		t.Fatal("Audio data is nil")
@@ -65,12 +73,21 @@ func TestIntegrationGenerateAudio(t *testing.T) {
 
 	t.Logf("Generated %d samples at %d Hz", len(audio.Samples), audio.SampleRate)
 
-	// Save to file
+	// Calculate audio duration and real-time factor
+	audioDuration := float64(len(audio.Samples)) / float64(audio.SampleRate)
+	rtf := genDuration.Seconds() / audioDuration
+	t.Logf("⏱️  Audio duration: %.2f seconds", audioDuration)
+	t.Logf("⏱️  Real-time factor (RTF): %.3fx (lower is better)", rtf)
+
+	// Save to file with timing
+	saveStartTime := time.Now()
 	outputPath := "/tmp/test-output.wav"
 	err = audio.SaveWAV(outputPath)
+	saveDuration := time.Since(saveStartTime)
 	if err != nil {
 		t.Fatalf("Failed to save audio: %v", err)
 	}
+	t.Logf("⏱️  WAV save time: %v", saveDuration)
 
 	// Verify file was created
 	info, err := os.Stat(outputPath)
@@ -83,6 +100,14 @@ func TestIntegrationGenerateAudio(t *testing.T) {
 	}
 
 	t.Logf("Saved audio to %s (%d bytes)", outputPath, info.Size())
+
+	// Summary
+	t.Logf("\n📊 === TIMING SUMMARY ===")
+	t.Logf("📊 Model load:    %v", loadDuration)
+	t.Logf("📊 Generation:    %v", genDuration)
+	t.Logf("📊 WAV save:      %v", saveDuration)
+	t.Logf("📊 Total:         %v", loadDuration+genDuration+saveDuration)
+	t.Logf("📊 RTF:           %.3fx", rtf)
 
 	// Cleanup
 	os.Remove(outputPath)
@@ -104,10 +129,13 @@ func TestIntegrationVoiceList(t *testing.T) {
 		AutoDownload: false,
 	}
 
+	startTime := time.Now()
 	runner, err := NewRunnerWithConfig(modelPath, 2, DefaultConfig(), true, libConfig)
+	loadDuration := time.Since(startTime)
 	if err != nil {
 		t.Fatalf("Failed to create runner: %v", err)
 	}
+	t.Logf("⏱️  Model loading time: %v", loadDuration)
 	// Skip cleanup - C library crash
 	// defer runner.Close()
 
@@ -141,10 +169,13 @@ func TestIntegrationMultipleGenerations(t *testing.T) {
 		AutoDownload: false,
 	}
 
+	startTime := time.Now()
 	runner, err := NewRunnerWithConfig(modelPath, 4, DefaultConfig(), true, libConfig)
+	loadDuration := time.Since(startTime)
 	if err != nil {
 		t.Fatalf("Failed to create runner: %v", err)
 	}
+	t.Logf("⏱️  Model loading time: %v", loadDuration)
 	// Skip cleanup - C library crash
 	// defer runner.Close()
 
@@ -154,9 +185,15 @@ func TestIntegrationMultipleGenerations(t *testing.T) {
 		"Testing text to speech",
 	}
 
+	totalGenTime := time.Duration(0)
+	totalSamples := 0
+	totalAudioDuration := 0.0
+
 	for _, text := range texts {
 		t.Run(text, func(t *testing.T) {
+			genStart := time.Now()
 			audio, err := runner.Generate(text)
+			genDuration := time.Since(genStart)
 			if err != nil {
 				t.Errorf("Failed to generate audio for '%s': %v", text, err)
 				return
@@ -166,8 +203,29 @@ func TestIntegrationMultipleGenerations(t *testing.T) {
 				t.Errorf("No samples generated for '%s'", text)
 			}
 
+			// Calculate metrics
+			audioDuration := float64(len(audio.Samples)) / float64(audio.SampleRate)
+			rtf := genDuration.Seconds() / audioDuration
+
+			t.Logf("⏱️  Generation time: %v", genDuration)
 			t.Logf("Generated %d samples for '%s'", len(audio.Samples), text)
+			t.Logf("⏱️  Audio duration: %.2fs, RTF: %.3fx", audioDuration, rtf)
+
+			totalGenTime += genDuration
+			totalSamples += len(audio.Samples)
+			totalAudioDuration += audioDuration
 		})
+	}
+
+	// Summary
+	t.Logf("\n📊 === MULTIPLE GENERATIONS SUMMARY ===")
+	t.Logf("📊 Model load:        %v", loadDuration)
+	t.Logf("📊 Total gen time:    %v", totalGenTime)
+	t.Logf("📊 Total samples:     %d", totalSamples)
+	t.Logf("📊 Total audio:       %.2f seconds", totalAudioDuration)
+	if totalAudioDuration > 0 {
+		avgRTF := totalGenTime.Seconds() / totalAudioDuration
+		t.Logf("📊 Average RTF:       %.3fx", avgRTF)
 	}
 }
 
@@ -217,16 +275,28 @@ func TestIntegrationDifferentConfigurations(t *testing.T) {
 		},
 	}
 
+	// Track timing for each config
+	timingResults := make(map[string]struct {
+		loadTime time.Duration
+		genTime  time.Duration
+		rtf      float64
+	})
+
 	for _, tc := range configs {
 		t.Run(tc.name, func(t *testing.T) {
+			loadStart := time.Now()
 			runner, err := NewRunnerWithConfig(modelPath, 2, tc.config, true, libConfig)
+			loadDuration := time.Since(loadStart)
 			if err != nil {
 				t.Fatalf("Failed to create runner: %v", err)
 			}
+			t.Logf("⏱️  Model loading time: %v", loadDuration)
 			// Skip cleanup - C library crash
 			// defer runner.Close()
 
+			genStart := time.Now()
 			audio, err := runner.Generate("Test")
+			genDuration := time.Since(genStart)
 			if err != nil {
 				t.Errorf("Failed to generate audio: %v", err)
 				return
@@ -235,6 +305,38 @@ func TestIntegrationDifferentConfigurations(t *testing.T) {
 			if len(audio.Samples) == 0 {
 				t.Error("No samples generated")
 			}
+
+			// Calculate RTF
+			audioDuration := float64(len(audio.Samples)) / float64(audio.SampleRate)
+			rtf := genDuration.Seconds() / audioDuration
+
+			t.Logf("⏱️  Generation time: %v", genDuration)
+			t.Logf("⏱️  Audio duration: %.2fs, RTF: %.3fx", audioDuration, rtf)
+
+			// Store timing results
+			timingResults[tc.name] = struct {
+				loadTime time.Duration
+				genTime  time.Duration
+				rtf      float64
+			}{loadDuration, genDuration, rtf}
 		})
 	}
+
+	// Summary
+	t.Logf("\n📊 === CONFIGURATION COMPARISON ===")
+	for name, timing := range timingResults {
+		t.Logf("📊 %s: load=%v, gen=%v, RTF=%.3fx",
+			name, timing.loadTime, timing.genTime, timing.rtf)
+	}
+}
+
+// formatDuration formats a duration for display
+func formatDuration(d time.Duration) string {
+	if d < time.Millisecond {
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%.2fms", float64(d.Microseconds())/1000)
+	}
+	return fmt.Sprintf("%.2fs", d.Seconds())
 }

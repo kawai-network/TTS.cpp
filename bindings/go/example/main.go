@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/kawai-network/TTS.cpp/bindings/go"
 )
@@ -43,12 +44,15 @@ func main() {
 		config.Voice = *voice
 	}
 
-	// Create runner
+	// Create runner with timing
+	startTime := time.Now()
 	runner, err := tts.NewRunner(*modelPath, *threads, config, *cpuOnly)
+	loadDuration := time.Since(startTime)
 	if err != nil {
 		log.Fatalf("Failed to create runner: %v", err)
 	}
 	defer runner.Close()
+	fmt.Printf("⏱️  Model loading time: %v\n", loadDuration)
 
 	// Check if model supports voices
 	if runner.SupportsVoices() {
@@ -61,19 +65,39 @@ func main() {
 		}
 	}
 
-	// Generate audio
+	// Generate audio with timing
 	fmt.Printf("Generating audio for: %s\n", *text)
+	genStart := time.Now()
 	audio, err := runner.Generate(*text)
+	genDuration := time.Since(genStart)
 	if err != nil {
 		log.Fatalf("Failed to generate audio: %v", err)
 	}
+	fmt.Printf("⏱️  Audio generation time: %v\n", genDuration)
 
 	fmt.Printf("Generated %d samples at %d Hz\n", len(audio.Samples), audio.SampleRate)
 
-	// Save to file
+	// Calculate audio duration and real-time factor
+	audioDuration := float64(len(audio.Samples)) / float64(audio.SampleRate)
+	rtf := genDuration.Seconds() / audioDuration
+	fmt.Printf("⏱️  Audio duration: %.2f seconds\n", audioDuration)
+	fmt.Printf("⏱️  Real-time factor (RTF): %.3fx (lower is better)\n", rtf)
+
+	// Save to file with timing
+	saveStart := time.Now()
 	if err := audio.SaveWAV(*output); err != nil {
 		log.Fatalf("Failed to save audio: %v", err)
 	}
+	saveDuration := time.Since(saveStart)
+	fmt.Printf("⏱️  WAV save time: %v\n", saveDuration)
 
 	fmt.Printf("Audio saved to: %s\n", *output)
+
+	// Summary
+	fmt.Printf("\n📊 === TIMING SUMMARY ===\n")
+	fmt.Printf("📊 Model load:    %v\n", loadDuration)
+	fmt.Printf("📊 Generation:    %v\n", genDuration)
+	fmt.Printf("📊 WAV save:      %v\n", saveDuration)
+	fmt.Printf("📊 Total:         %v\n", loadDuration+genDuration+saveDuration)
+	fmt.Printf("📊 RTF:           %.3fx\n", rtf)
 }
