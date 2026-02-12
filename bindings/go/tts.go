@@ -45,7 +45,7 @@ func DefaultLibraryConfig() LibraryConfig {
 type runnerLibs struct {
 	libHandle uintptr
 
-	// Function pointers
+	// Function pointers (stored as uintptr for SyscallN)
 	configDefault             uintptr
 	runnerCreate              uintptr
 	generate                  uintptr
@@ -100,20 +100,59 @@ func loadLibrary(config LibraryConfig) (*runnerLibs, error) {
 
 	rl := &runnerLibs{libHandle: handle}
 
-	// Resolve function symbols
-	purego.RegisterLibFunc(&rl.configDefault, handle, "tts_config_default")
-	purego.RegisterLibFunc(&rl.runnerCreate, handle, "tts_runner_create")
-	purego.RegisterLibFunc(&rl.generate, handle, "tts_generate")
-	purego.RegisterLibFunc(&rl.audioDataFree, handle, "tts_audio_data_free")
-	purego.RegisterLibFunc(&rl.runnerFree, handle, "tts_runner_free")
-	purego.RegisterLibFunc(&rl.getError, handle, "tts_get_error")
-	purego.RegisterLibFunc(&rl.listVoices, handle, "tts_list_voices")
-	purego.RegisterLibFunc(&rl.freeVoices, handle, "tts_free_voices")
-	purego.RegisterLibFunc(&rl.updateConditionalPrompt, handle, "tts_update_conditional_prompt")
-	purego.RegisterLibFunc(&rl.supportsVoices, handle, "tts_supports_voices")
-	purego.RegisterLibFunc(&rl.getSupportedArchitectures, handle, "tts_get_supported_architectures")
-	purego.RegisterLibFunc(&rl.freeArchitectures, handle, "tts_free_architectures")
-	purego.RegisterLibFunc(&rl.saveAudioWav, handle, "tts_save_audio_wav")
+	// Resolve function symbols using Dlsym
+	rl.configDefault, err = purego.Dlsym(handle, "tts_config_default")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_config_default: %w", err)
+	}
+	rl.runnerCreate, err = purego.Dlsym(handle, "tts_runner_create")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_runner_create: %w", err)
+	}
+	rl.generate, err = purego.Dlsym(handle, "tts_generate")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_generate: %w", err)
+	}
+	rl.audioDataFree, err = purego.Dlsym(handle, "tts_audio_data_free")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_audio_data_free: %w", err)
+	}
+	rl.runnerFree, err = purego.Dlsym(handle, "tts_runner_free")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_runner_free: %w", err)
+	}
+	rl.getError, err = purego.Dlsym(handle, "tts_get_error")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_get_error: %w", err)
+	}
+	rl.listVoices, err = purego.Dlsym(handle, "tts_list_voices")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_list_voices: %w", err)
+	}
+	rl.freeVoices, err = purego.Dlsym(handle, "tts_free_voices")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_free_voices: %w", err)
+	}
+	rl.updateConditionalPrompt, err = purego.Dlsym(handle, "tts_update_conditional_prompt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_update_conditional_prompt: %w", err)
+	}
+	rl.supportsVoices, err = purego.Dlsym(handle, "tts_supports_voices")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_supports_voices: %w", err)
+	}
+	rl.getSupportedArchitectures, err = purego.Dlsym(handle, "tts_get_supported_architectures")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_get_supported_architectures: %w", err)
+	}
+	rl.freeArchitectures, err = purego.Dlsym(handle, "tts_free_architectures")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_free_architectures: %w", err)
+	}
+	rl.saveAudioWav, err = purego.Dlsym(handle, "tts_save_audio_wav")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tts_save_audio_wav: %w", err)
+	}
 
 	return rl, nil
 }
