@@ -8,6 +8,11 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
 jobs:
   build-shared-linux:
     name: Build Shared Library (Linux)
@@ -169,6 +174,9 @@ jobs:
     needs: [build-shared-linux, build-shared-macos, build-shared-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+      packages: write
 
     steps:
     - name: Download all artifacts
