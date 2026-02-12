@@ -405,7 +405,42 @@ jobs:
         echo "All cross-compilation targets built successfully!" >> $GITHUB_STEP_SUMMARY
         
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Integration Test" >> $GITHUB_STEP_SUMMARY
-        echo "Integration test builds C library and prepares for TTS generation" >> $GITHUB_STEP_SUMMARY
-        echo "Note: Full integration test requires model file (download manually)" >> $GITHUB_STEP_SUMMARY
+        echo "### Integration Test Results" >> $GITHUB_STEP_SUMMARY
+        
+        # Parse integration test timing from logs
+        for os in ubuntu-latest macos-latest; do
+          artifact="artifacts/integration-test-${os}/integration-test.log"
+          if [ -f "${artifact}" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### ${os}" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract timing information
+            model_load=$(grep "Model loading time:" "${artifact}" | head -1 | sed 's/.*Model loading time: //')
+            gen_time=$(grep "Audio generation time:" "${artifact}" | head -1 | sed 's/.*Audio generation time: //')
+            audio_dur=$(grep "Audio duration:" "${artifact}" | head -1 | sed 's/.*Audio duration: //')
+            rtf=$(grep "Real-time factor (RTF):" "${artifact}" | head -1 | sed 's/.*RTF: //')
+            wav_save=$(grep "WAV save time:" "${artifact}" | head -1 | sed 's/.*WAV save time: //')
+            
+            if [ -n "$model_load" ] || [ -n "$gen_time" ]; then
+              echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              [ -n "$model_load" ] && echo "| Model Load Time | ${model_load} |" >> $GITHUB_STEP_SUMMARY
+              [ -n "$gen_time" ] && echo "| Generation Time | ${gen_time} |" >> $GITHUB_STEP_SUMMARY
+              [ -n "$audio_dur" ] && echo "| Audio Duration | ${audio_dur} |" >> $GITHUB_STEP_SUMMARY
+              [ -n "$rtf" ] && echo "| RTF | ${rtf} |" >> $GITHUB_STEP_SUMMARY
+              [ -n "$wav_save" ] && echo "| WAV Save Time | ${wav_save} |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Test completed (timing info not available)" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Check for test status
+            if grep -q "FAIL" "${artifact}"; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Status: ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            elif grep -q "PASS" "${artifact}"; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Status: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+        done
       shell: bash
