@@ -281,12 +281,12 @@ jobs:
         echo "TTS_LIBRARY_PATH set to: $(cat $GITHUB_ENV | grep TTS_LIBRARY_PATH | cut -d= -f2)"
       shell: bash
     
-    - name: Download test model (Kokoro Q5)
+    - name: Download test model (Kokoro Q5 no_espeak)
       run: |
         echo "Downloading Kokoro test model..."
-        # Download Kokoro_espeak_Q5.gguf (180MB) - smaller quantized version
+        # Download Kokoro_no_espeak_Q5.gguf (200MB) - no espeak dependency
         curl -L -o /tmp/test-model.gguf \
-          "https://huggingface.co/mmwillet2/Kokoro_GGUF/resolve/main/Kokoro_espeak_Q5.gguf"
+          "https://huggingface.co/mmwillet2/Kokoro_GGUF/resolve/main/Kokoro_no_espeak_Q5.gguf"
         
         # Verify download
         if [ -f "/tmp/test-model.gguf" ]; then
