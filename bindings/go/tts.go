@@ -615,7 +615,7 @@ func (a *AudioData) SaveWAV(filePath string) error {
 
 // Close frees the runner resources
 func (r *Runner) Close() {
-	if r.handle != 0 && r.libs != nil {
+	if r.handle != 0 && r.libs != nil && r.libs.runnerFree != 0 {
 		purego.SyscallN(r.libs.runnerFree, r.handle)
 		r.handle = 0
 	}
