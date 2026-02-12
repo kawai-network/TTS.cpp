@@ -2,7 +2,6 @@ package tts
 
 import (
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -156,4 +155,3 @@ func (m *mockReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 	}
 	return n, nil
 }
-
