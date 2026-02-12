@@ -3,11 +3,9 @@ package tts
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+	"github.com/kawai-network/grab"
 )
 
 // Embedded libraries will be available here when bundled
@@ -309,41 +308,80 @@ func extractZip(r io.ReaderAt, size int64, destDir string) bool {
 	return true
 }
 
-// downloadLibrary downloads library from GitHub releases
+// downloadLibrary downloads library from GitHub releases using grab (with resume support)
 func downloadLibrary(config LibraryConfig, destDir string) bool {
-	platform := runtime.GOOS + "-" + runtime.GOARCH
-	zipURL := fmt.Sprintf("%s/%s/tts-shared-%s.zip", config.DownloadURL, config.Version, platform)
-
-	// Determine which compiler variant to use
-	if runtime.GOOS == "linux" {
-		// Try gcc first, then clang
-		zipURL = fmt.Sprintf("%s/%s/tts-shared-linux-gcc.zip", config.DownloadURL, config.Version)
+	// Map platform to release asset name
+	var assetName string
+	switch runtime.GOOS {
+	case "linux":
+		assetName = "tts-c-api-linux-gcc.zip"
+	case "darwin":
+		assetName = "tts-c-api-macos-arm64.zip"
+	case "windows":
+		assetName = "tts-c-api-windows-msvc.zip"
+	default:
+		return false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	zipURL := fmt.Sprintf("%s/%s/%s", config.DownloadURL, config.Version, assetName)
+
+	// Create destination file path
+	zipPath := filepath.Join(destDir, "library.zip")
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return false
+	}
+
+	// Create a grab client
+	client := grab.NewClient()
+	client.UserAgent = "TTS-Go-Bindings/1.0"
+
+	// Create request
+	req, err := grab.NewRequest(zipPath, zipURL)
+	if err != nil {
+		return false
+	}
+
+	// Set timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	req = req.WithContext(ctx)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", zipURL, nil)
+	// Start download with resume support
+	resp := client.Do(req)
+	if resp == nil {
+		return false
+	}
+
+	// Wait for download to complete
+	if err := resp.Err(); err != nil {
+		return false
+	}
+
+	// Check if download was successful
+	if resp.HTTPResponse.StatusCode != 200 {
+		return false
+	}
+
+	// Extract the zip file
+	file, err := os.Open(zipPath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
 	if err != nil {
 		return false
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
+	success := extractZip(file, stat.Size(), destDir)
 
-	if resp.StatusCode != http.StatusOK {
-		return false
-	}
+	// Clean up zip file after extraction
+	os.Remove(zipPath)
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-
-	return extractZip(bytes.NewReader(data), int64(len(data)), destDir)
+	return success
 }
 
 // ensureLibraryInitialized ensures library is loaded
