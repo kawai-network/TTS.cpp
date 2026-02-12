@@ -7,6 +7,7 @@ This package provides **CGO-free** Go bindings for the TTS.cpp text-to-speech li
 - ✅ **No CGO required** - Pure Go implementation
 - ✅ **Easy cross-compilation** - Just set GOOS/GOARCH
 - ✅ **Auto-download libraries** - Automatically downloads shared libraries from GitHub releases
+- ✅ **Resume support** - Uses [grab](https://github.com/kawai-network/grab) for reliable downloads with resume capability
 - ✅ **Simple distribution** - `go get` and use immediately
 - ✅ **Multiple platforms** - Linux, macOS, Windows support
 
@@ -196,6 +197,18 @@ If you get "could not find TTS library":
 2. Or enable `AutoDownload: true` (default)
 3. Or place the library in the same directory as your executable
 
+### Auto-Download with Resume Support
+
+The library automatically downloads the appropriate C API library from GitHub releases on first use. The downloaded library is cached in:
+- Linux/macOS: `~/.cache/tts-go/<version>/`
+- Windows: `%LOCALAPPDATA%\tts-go\<version>\`
+
+Downloads use [grab](https://github.com/kawai-network/grab) library which supports:
+- **Resume interrupted downloads** - If download is interrupted, it will resume from where it left off
+- **Progress tracking** - Monitor download progress
+- **Checksum verification** - Verify downloaded files
+- **Concurrent downloads** - Efficient download management
+
 ### Download Fails
 
 If auto-download fails:
@@ -231,4 +244,3 @@ Contributions welcome! Please ensure:
 - Code works with `CGO_ENABLED=0`
 - Tested on multiple platforms
 - Documentation is updated
-# Trigger workflow
