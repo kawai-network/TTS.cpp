@@ -1,0 +1,176 @@
+name: Build Shared Libraries
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-shared-linux:
+    name: Build Shared Library (Linux)
+    strategy:
+      matrix:
+        c_compiler: [gcc, clang]
+        include:
+          - c_compiler: gcc
+            cpp_compiler: g++
+          - c_compiler: clang
+            cpp_compiler: clang++
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+
+    - name: Set build directory
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build-shared" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -G Ninja
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_SHARED_LIBS=ON
+        -DTTS_BUILD_EXAMPLES=OFF
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release --parallel $(nproc)
+
+    - name: Find shared library
+      id: find-lib
+      shell: bash
+      run: |
+        LIB_PATH=$(find ${{ steps.strings.outputs.build-output-dir }} -name "libtts.so" -o -name "libtts.dylib" 2>/dev/null | head -1)
+        echo "lib-path=$LIB_PATH" >> "$GITHUB_OUTPUT"
+        if [ -n "$LIB_PATH" ]; then
+          ls -la "$LIB_PATH"
+        fi
+
+    - name: Upload Shared Library
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-shared-linux-${{ matrix.c_compiler }}
+        path: |
+          ${{ steps.strings.outputs.build-output-dir }}/**/libtts.*
+          ${{ steps.strings.outputs.build-output-dir }}/**/ggml/libggml.*
+        if-no-files-found: warn
+
+  build-shared-macos:
+    name: Build Shared Library (macOS)
+    strategy:
+      matrix:
+        os: [macos-latest, macos-13]
+        arch: [x86_64, arm64]
+        exclude:
+          - os: macos-latest
+            arch: x86_64
+          - os: macos-13
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        brew install cmake ninja
+
+    - name: Set build directory
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build-shared" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_SHARED_LIBS=ON
+        -DTTS_BUILD_EXAMPLES=OFF
+        -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release --parallel $(sysctl -n hw.ncpu)
+
+    - name: Upload Shared Library
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-shared-macos-${{ matrix.arch }}
+        path: |
+          ${{ steps.strings.outputs.build-output-dir }}/**/libtts.*
+          ${{ steps.strings.outputs.build-output-dir }}/**/ggml/libggml.*
+        if-no-files-found: warn
+
+  build-shared-windows:
+    name: Build Shared Library (Windows)
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Enable Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+
+    - name: Configure CMake
+      run: |
+        cmake -B build-shared -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DTTS_BUILD_EXAMPLES=OFF
+
+    - name: Build
+      run: cmake --build build-shared --config Release --parallel
+
+    - name: Upload Shared Library
+      uses: actions/upload-artifact@v4
+      with:
+        name: tts-shared-windows-msvc
+        path: |
+          build-shared/**/tts.dll
+          build-shared/**/ggml.dll
+          build-shared/**/*.lib
+        if-no-files-found: warn
+
+  release:
+    name: Create Release
+    needs: [build-shared-linux, build-shared-macos, build-shared-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/**/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
