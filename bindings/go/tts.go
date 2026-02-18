@@ -18,6 +18,11 @@ import (
 	"github.com/kawai-network/grab"
 )
 
+// Platform-specific functions are defined in library_unix.go and library_windows.go
+// - dlopen(path string) (uintptr, error)
+// - dlsym(handle uintptr, name string) (uintptr, error)
+// - dlclose(handle uintptr) error
+
 // Embedded libraries will be available here when bundled
 // For now, libraries are auto-downloaded from GitHub releases
 // var embeddedLibs embed.FS
@@ -36,7 +41,7 @@ func DefaultLibraryConfig() LibraryConfig {
 		LibraryPath:  "",
 		AutoDownload: true,
 		DownloadURL:  "https://github.com/kawai-network/TTS.cpp/releases/download",
-		Version:      "v0.1.0",
+		Version:      "v0.1.3",
 	}
 }
 
@@ -91,64 +96,64 @@ func loadLibrary(config LibraryConfig) (*runnerLibs, error) {
 		return nil, fmt.Errorf("could not find TTS library. Please set LibraryPath or enable AutoDownload")
 	}
 
-	// Load the library
-	handle, err := purego.Dlopen(libPath, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	// Load the library using platform-specific function
+	handle, err := dlopen(libPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load library %s: %w", libPath, err)
 	}
 
 	rl := &runnerLibs{libHandle: handle}
 
-	// Resolve function symbols using Dlsym
-	rl.configDefault, err = purego.Dlsym(handle, "tts_config_default")
+	// Resolve function symbols using platform-specific dlsym
+	rl.configDefault, err = dlsym(handle, "tts_config_default")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_config_default: %w", err)
 	}
-	rl.runnerCreate, err = purego.Dlsym(handle, "tts_runner_create")
+	rl.runnerCreate, err = dlsym(handle, "tts_runner_create")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_runner_create: %w", err)
 	}
-	rl.generate, err = purego.Dlsym(handle, "tts_generate")
+	rl.generate, err = dlsym(handle, "tts_generate")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_generate: %w", err)
 	}
-	rl.audioDataFree, err = purego.Dlsym(handle, "tts_audio_data_free")
+	rl.audioDataFree, err = dlsym(handle, "tts_audio_data_free")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_audio_data_free: %w", err)
 	}
-	rl.runnerFree, err = purego.Dlsym(handle, "tts_runner_free")
+	rl.runnerFree, err = dlsym(handle, "tts_runner_free")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_runner_free: %w", err)
 	}
-	rl.getError, err = purego.Dlsym(handle, "tts_get_error")
+	rl.getError, err = dlsym(handle, "tts_get_error")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_get_error: %w", err)
 	}
-	rl.listVoices, err = purego.Dlsym(handle, "tts_list_voices")
+	rl.listVoices, err = dlsym(handle, "tts_list_voices")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_list_voices: %w", err)
 	}
-	rl.freeVoices, err = purego.Dlsym(handle, "tts_free_voices")
+	rl.freeVoices, err = dlsym(handle, "tts_free_voices")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_free_voices: %w", err)
 	}
-	rl.updateConditionalPrompt, err = purego.Dlsym(handle, "tts_update_conditional_prompt")
+	rl.updateConditionalPrompt, err = dlsym(handle, "tts_update_conditional_prompt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_update_conditional_prompt: %w", err)
 	}
-	rl.supportsVoices, err = purego.Dlsym(handle, "tts_supports_voices")
+	rl.supportsVoices, err = dlsym(handle, "tts_supports_voices")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_supports_voices: %w", err)
 	}
-	rl.getSupportedArchitectures, err = purego.Dlsym(handle, "tts_get_supported_architectures")
+	rl.getSupportedArchitectures, err = dlsym(handle, "tts_get_supported_architectures")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_get_supported_architectures: %w", err)
 	}
-	rl.freeArchitectures, err = purego.Dlsym(handle, "tts_free_architectures")
+	rl.freeArchitectures, err = dlsym(handle, "tts_free_architectures")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_free_architectures: %w", err)
 	}
-	rl.saveAudioWav, err = purego.Dlsym(handle, "tts_save_audio_wav")
+	rl.saveAudioWav, err = dlsym(handle, "tts_save_audio_wav")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tts_save_audio_wav: %w", err)
 	}
