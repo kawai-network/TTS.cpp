@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.25']
         include:
           - os: ubuntu-latest
             goos: linux
@@ -63,12 +63,14 @@ jobs:
         go test -v -coverprofile=coverage.out ./... 2>&1 | tee test-output.log
       env:
         CGO_ENABLED: 0
+      shell: bash
     
     - name: Run benchmarks
       run: |
         go test -bench=. -benchtime=1s ./... 2>&1 | tee benchmark-output.log
       env:
         CGO_ENABLED: 0
+      shell: bash
     
     - name: Check code formatting
       run: |
