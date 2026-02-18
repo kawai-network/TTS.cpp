@@ -74,6 +74,9 @@ jobs:
     
     - name: Check code formatting
       run: |
+        # Normalize line endings to LF (handles Windows CRLF issues)
+        find . -name "*.go" -type f -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+        
         gofmt -d .
         if [ -n "$(gofmt -l .)" ]; then
           echo "Code is not formatted. Please run: gofmt -w ."
