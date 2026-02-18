@@ -87,6 +87,7 @@ jobs:
     - name: Generate coverage report
       run: |
         go tool cover -html=coverage.out -o coverage.html
+      shell: bash
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
