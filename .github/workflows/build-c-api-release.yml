@@ -198,7 +198,7 @@ jobs:
         path: package/tts-c-api-windows-msvc.zip
 
   release:
-    name: Create Release v0.1.1
+    name: Create Release
     needs: [build-c-api-linux, build-c-api-macos, build-c-api-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'

@@ -2,6 +2,7 @@ package tts
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -56,21 +57,29 @@ func TestFindLibraryInPath(t *testing.T) {
 }
 
 func TestTryExtractOrDownload_CacheDir(t *testing.T) {
-	// Create temporary directory for testing
-	tempDir := t.TempDir()
-
-	config := LibraryConfig{
-		Version:      "v0.1.1",
-		DownloadURL:  "https://github.com/kawai-network/TTS.cpp/releases/download",
-		AutoDownload: false, // Don't actually download in unit test
-	}
-
 	// Test with non-existent library (should fail gracefully)
 	t.Run("library not found without download", func(t *testing.T) {
-		// Override cache dir temporarily
-		origCache := os.Getenv("XDG_CACHE_HOME")
-		os.Setenv("XDG_CACHE_HOME", tempDir)
-		defer os.Setenv("XDG_CACHE_HOME", origCache)
+		// Create temporary directory for testing
+		tempDir := t.TempDir()
+
+		// Create a fresh cache directory structure
+		cacheDir := filepath.Join(tempDir, ".cache")
+		if err := os.MkdirAll(cacheDir, 0755); err != nil {
+			t.Fatalf("Failed to create cache dir: %v", err)
+		}
+
+		// Override cache dir temporarily using HOME environment
+		// This works because os.UserCacheDir() uses $HOME/.cache on Linux
+		origHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempDir)
+		defer os.Setenv("HOME", origHome)
+
+		// Use a unique version that won't exist in cache
+		config := LibraryConfig{
+			Version:      "v0.0.0-test-nonexistent",
+			DownloadURL:  "",
+			AutoDownload: false, // Don't actually download in unit test
+		}
 
 		result := tryExtractOrDownload(config)
 		if result != "" {

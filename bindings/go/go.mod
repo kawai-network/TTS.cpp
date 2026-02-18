@@ -1,6 +1,6 @@
 module github.com/kawai-network/TTS.cpp/bindings/go
 
-go 1.21
+go 1.25.5
 
 require (
 	github.com/ebitengine/purego v0.9.1
